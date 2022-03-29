@@ -1,0 +1,64 @@
+
+def status = "Success"
+
+pipeline {
+   agent any
+   parameters {
+   		choice(name: 'ExecutionType', choices: ['@Sanity', '@test', '@Forms', '@MsgCenter', '@Regression','@AccountOpening','@CustomerManagement','@Dashboard','@GenericFunctions','@UserManagement','@Exchange','@Liquidation',' @Purchase','@ViewAccountActivity'], description: 'Pick Execution type')
+   		choice(name: 'EnvironmentType',choices:['SIT','UAT'], description: 'Pick Environment type')
+		choice(name: 'Parallel', choices:['1','2','3','4','5'], description: 'Parallel Threads')
+		choice(name: 'Platform', choices:['EC2','CBT'], description: 'Target Platform')
+		choice(name: 'BrowserType', choices:['Chrome', 'Firefox', 'Edge', 'IE' , 'Safari'], description: 'Browser Type')
+		choice(name: 'BrowserVersion', choices:['88','87','86','85','84','14','13','11'], description: 'Browser Version for IE -11, Safari -14, Rest of them - 88-84')
+		choice(name: 'OperatingSystem', choices:['Windows','Mac'], description: 'Select Operating System')
+		choice(name: 'ExecutedBy', choices:['Ashwini','Default'], description: 'Select Executed By')
+   } 
+   options {
+        timeout(time: 600) 
+    }
+   stages {
+      stage('Git Pull') {
+         steps {
+            git branch: 'master', credentialsId: 'abbagsh_git', url: 'https://github.com/victorycapital/VCMAutomation.git'
+            echo pwd
+	    echo sh(script: 'env|sort', returnStdout: true)
+	    echo "${env.ExecutionType}"
+	    echo "${env.EnvironmentType}"
+	    	  
+	         }
+         }
+	 stage('Selenium Execution'){
+	 steps{
+	 	script{
+		 	 if(env.EnvironmentType == 'SIT')
+			 {
+		 	 sh label: '', script: 'mvn clean'
+		   	 sh label: '', script: 'mvn test -DThreadCount=${Parallel} -DPlatform=${Platform} -DBrowser=${BrowserType} -DVersion=${BrowserVersion} -DEnvironment=${EnvironmentType} -DOperatingSystem=${OperatingSystem} -Dcucumber.filter.tags="${ExecutionType} and not @UAT"'
+		         }
+		         else if(env.EnvironmentType == 'UAT')
+			 {
+		 	 sh label: '', script: 'mvn clean'
+		 	 sh label: '', script: 'mvn test -DThreadCount=${Parallel} -DPlatform=${Platform} -DBrowser=${BrowserType} -DVersion=${BrowserVersion} -DEnvironment=${EnvironmentType} -DOperatingSystem=${OperatingSystem} -Dcucumber.filter.tags="${ExecutionType} and not @SIT"'
+		         }
+		        }
+	  }
+	 }
+	 stage('Cucumber Report'){
+	 steps {
+	 cucumber failedFeaturesNumber: -1, failedScenariosNumber: -1, failedStepsNumber: -1, fileIncludePattern: '**/*.json', pendingStepsNumber: -1, skippedStepsNumber: -1, sortingMethod: 'ALPHABETICAL', undefinedStepsNumber: -1
+	 }
+	 }
+      }
+  
+ post{
+       always{
+           
+           echo 'Inside Always'
+           emailext (
+	         replyTo: 'jagadeesh.javali@cognizant.com, Ashwini.Ghuge2@cognizant.com', subject: "VCM Web Execution -${env.EnvironmentType}  #${BUILD_NUMBER} ", attachmentsPattern: 'target/PdfReport/ExtentReport.pdf', body: "${currentBuild.currentResult}: Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}\n More info at: ${env.BUILD_URL}", to: "Ashwini.Ghuge2@cognizant.com,jagadeesh.javali@cognizant.com")
+
+      }
+   }
+
+   
+}

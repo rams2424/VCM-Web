@@ -1,0 +1,53 @@
+def status = "Success"
+
+pipeline {
+   agent any
+   parameters {
+   		choice(name: 'ExecutionType', choices: ['@Sanity', '@Test','@Regression','@AccountOpening','@CustomerManagement','@Dashboard','@GenericFunctions','@UserManagement','@Exchange','@Liquidation',' @Purchase','@ViewAccountActivity'], description: 'Pick Execution type')
+   		choice(name: 'EnvironmentType',choices:['@SIT','@UAT'], description: 'Pick Environment type')
+		choice(name: 'Parallel', choices:['1','2','3','4','5'], description: 'Parallel Threads')
+   }
+   options {
+        timeout(time: 200) 
+    }
+   stages {
+      stage('Git Pull') {
+         steps {
+            git branch: 'parallel-execution', credentialsId: 'abbagsh_git', url: 'https://github.com/victorycapital/VCMAutomation.git'
+            echo pwd
+	    echo sh(script: 'env|sort', returnStdout: true)
+	    echo "${env.ExecutionType}"
+	    echo "${env.EnvironmentType}"
+	    	                
+		                sh label: '', script: 'mvn clean'
+				script{
+				if(env.EnvironmentType == '@SIT')
+				{
+				sh label: '', script: 'mvn test -DThreadCount=${Parallel} -Dcucumber.filter.tags="${ExecutionType} and not @UAT"'
+				}else if(env.EnvironmentType == '@UAT'){
+				sh label: '', script: 'mvn test -DThreadCount=${Parallel} -Dcucumber.filter.tags="${ExecutionType} and not @SIT"'
+				}
+				}
+				
+	    		
+	  		}
+         }
+	 stage('Cucumber Report'){
+	 steps {
+	 cucumber failedFeaturesNumber: -1, failedScenariosNumber: -1, failedStepsNumber: -1, fileIncludePattern: '**/*.json', pendingStepsNumber: -1, skippedStepsNumber: -1, sortingMethod: 'ALPHABETICAL', undefinedStepsNumber: -1
+	 }
+	 }
+      }
+  
+ post{
+       always{
+           
+           echo 'Inside Always'
+           emailext (
+	         replyTo: 'jagadeesh.javali@cognizant.com', subject: "Web Automation - ${JOB_NAME} #${BUILD_NUMBER} ", attachmentsPattern: 'target/PdfReport/ExtentReport.pdf', body: "${currentBuild.currentResult}: Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}\n More info at: ${env.BUILD_URL}", to: "Ashwini.Ghuge2@cognizant.com,jagadeesh.javali@cognizant.com")
+
+      }
+   }
+
+   
+}
